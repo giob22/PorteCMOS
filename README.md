@@ -62,6 +62,9 @@ python -m http.server 8000
 poi apri http://localhost:8000/docs/ (app), http://localhost:8000/tests/ (test) e
 http://localhost:8000/tests/gallery.html (galleria degli schemi).
 
-Con Node i test si lanciano con `node tests/run.mjs`. A ogni push su `main` il
-workflow `.github/workflows/pages.yml` esegue i test e, se passano, pubblica
-la cartella `docs/` su GitHub Pages.
+Con Node i test si lanciano con `node tests/run.mjs`.
+
+## Pubblicazione
+
+GitHub Pages pubblica la cartella `docs/` del branch `main` (Settings → Pages →
+*Deploy from a branch*): ogni push su `main` aggiorna il sito in circa un minuto.
