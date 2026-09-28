@@ -87,9 +87,13 @@
               <span class="track"></span>
               <span>Simulazione</span>
             </label>
-            <button type="button" class="btn ghost small" id="export-svg">SVG</button>
-            <button type="button" class="btn ghost small" id="export-png">PNG</button>
-            <button type="button" class="btn small" id="fullscreen" title="Schermo intero (tasto F)">Schermo intero</button>
+            <button type="button" class="btn small icon" id="copy-img" title="Copia lo schema come immagine da incollare negli appunti (tasto C)">
+              <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><rect x="5" y="5" width="9" height="9" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M11 3V2.8A1.8 1.8 0 0 0 9.2 1H3.8A1.8 1.8 0 0 0 2 2.8v5.4A1.8 1.8 0 0 0 3.8 10H4" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+              Copia immagine
+            </button>
+            <button type="button" class="btn ghost small" id="export-svg" title="Scarica lo schema in formato vettoriale">SVG</button>
+            <button type="button" class="btn ghost small" id="export-png" title="Scarica lo schema come immagine">PNG</button>
+            <button type="button" class="btn ghost small" id="fullscreen" title="Schermo intero (tasto F)">Schermo intero</button>
           </div>
         </div>
         <div class="sim-panel" id="sim-panel" hidden></div>

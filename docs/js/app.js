@@ -325,30 +325,72 @@ function exportSVG() {
   if (text) download(new Blob([text], { type: 'image/svg+xml' }), `${fileBase()}.svg`);
 }
 
-function exportPNG() {
-  const text = exportSVGText();
-  if (!text) return;
-  const svg = $('#schematic svg');
-  const { width, height } = svg.viewBox.baseVal;
-  const scale = 3;
-  const img = new Image();
-  const url = URL.createObjectURL(new Blob([text], { type: 'image/svg+xml' }));
-  img.onload = () => {
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.round(width * scale);
-    canvas.height = Math.round(height * scale);
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-    URL.revokeObjectURL(url);
-    canvas.toBlob((blob) => download(blob, `${fileBase()}.png`), 'image/png');
-  };
-  img.onerror = () => {
-    URL.revokeObjectURL(url);
+/** Rasterizza lo schema visualizzato in un PNG, `scale` volte la dimensione naturale. */
+function schematicPNG(scale) {
+  return new Promise((resolve, reject) => {
+    const text = exportSVGText();
+    if (!text) {
+      reject(new Error('Nessuno schema da esportare'));
+      return;
+    }
+    const { width, height } = $('#schematic svg').viewBox.baseVal;
+    const img = new Image();
+    const url = URL.createObjectURL(new Blob([text], { type: 'image/svg+xml' }));
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(width * scale);
+      canvas.height = Math.round(height * scale);
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(url);
+      canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('PNG vuoto'))), 'image/png');
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('Rasterizzazione non riuscita'));
+    };
+    img.src = url;
+  });
+}
+
+async function exportPNG() {
+  try {
+    download(await schematicPNG(3), `${fileBase()}.png`);
+  } catch {
     toast('Esportazione PNG non riuscita');
-  };
-  img.src = url;
+  }
+}
+
+/**
+ * Copia lo schema negli appunti come immagine PNG, pronta da incollare in
+ * OneNote, Word, Notion, GoodNotes… Se il browser non lo consente scarica il PNG.
+ */
+async function copyImage() {
+  if (!state.result) return;
+  if ($('#schematic').classList.contains('stale')) {
+    toast('Correggi prima l’espressione: lo schema mostrato non è aggiornato');
+    return;
+  }
+  // La promessa va passata subito a ClipboardItem: Safari accetta la scrittura
+  // negli appunti solo se avviene nello stesso gesto dell'utente.
+  const png = schematicPNG(2);
+  const paste = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘V' : 'Ctrl+V';
+  try {
+    if (!navigator.clipboard || !navigator.clipboard.write || typeof ClipboardItem === 'undefined') {
+      throw new Error('Clipboard API non disponibile');
+    }
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': png })]);
+    toast(`Schema copiato: incollalo negli appunti con ${paste}`);
+  } catch {
+    try {
+      download(await png, `${fileBase()}.png`);
+      toast('Il browser non permette di copiare immagini: PNG scaricato');
+    } catch {
+      toast('Copia non riuscita');
+    }
+  }
 }
 
 function toggleFullscreen() {
@@ -454,15 +496,17 @@ function init() {
 
   $('#export-svg').addEventListener('click', exportSVG);
   $('#export-png').addEventListener('click', exportPNG);
+  $('#copy-img').addEventListener('click', copyImage);
   $('#fullscreen').addEventListener('click', toggleFullscreen);
   document.addEventListener('fullscreenchange', () => {
     $('#fullscreen').textContent = document.fullscreenElement ? 'Esci (Esc)' : 'Schermo intero';
   });
   document.addEventListener('keydown', (e) => {
     const typing = e.target.closest('input, textarea, select');
-    if (!typing && (e.key === 'f' || e.key === 'F') && !e.ctrlKey && !e.metaKey && !e.altKey) {
-      toggleFullscreen();
-    }
+    if (typing || e.ctrlKey || e.metaKey || e.altKey) return;
+    const key = e.key.toLowerCase();
+    if (key === 'f') toggleFullscreen();
+    else if (key === 'c') copyImage();
   });
 
   $('#copy-link').addEventListener('click', async () => {
