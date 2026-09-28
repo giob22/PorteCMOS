@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Porte CMOS</title>
+  <meta name="description" content="Scrivi una funzione logica (es. Y = not(A + BCD)) e ottieni lo schema a transistor CMOS con reti di pull-up e pull-down, tabella di verità, dimensionamento e simulazione.">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="css/style.css">
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <img src="favicon.svg" alt="" width="34" height="34">
+      <div>
+        <h1>Porte CMOS</h1>
+        <p>Dalla funzione logica allo schema a transistor</p>
+      </div>
+    </div>
+    <a class="gh-link" id="repo-link" href="https://github.com/giob22/PorteCMOS" target="_blank" rel="noopener">Codice su GitHub</a>
+  </header>
+
+  <main>
+    <section class="card input-card">
+      <div class="input-head">
+        <label for="expr">Funzione logica</label>
+        <button type="button" class="btn ghost small" id="copy-link" title="Copia un link a questa funzione">Copia link</button>
+      </div>
+      <input id="expr" class="expr" type="text" spellcheck="false" autocomplete="off" autocapitalize="off"
+             placeholder="Y = not(A + BCD)" aria-describedby="error">
+      <div id="error" class="error" role="alert" hidden></div>
+
+      <div class="examples" id="examples" aria-label="Esempi"></div>
+
+      <div class="options">
+        <div class="opt">
+          <span class="opt-label">Realizzazione</span>
+          <div class="segmented" role="radiogroup" aria-label="Realizzazione" id="mode">
+            <button type="button" role="radio" data-mode="auto">Automatica</button>
+            <button type="button" role="radio" data-mode="direct">Porta complessa</button>
+            <button type="button" role="radio" data-mode="outinv">+ invertitore d’uscita</button>
+          </div>
+        </div>
+        <label class="opt check">
+          <input type="checkbox" id="opt-inverters">
+          <span>Disegna gli invertitori per gli ingressi negati</span>
+        </label>
+        <div class="opt sizing">
+          <label class="check">
+            <input type="checkbox" id="opt-sizing">
+            <span>Dimensionamento W/L</span>
+          </label>
+          <label class="ratio" title="Rapporto (W/L) del PMOS dell'invertitore di riferimento, con (W/L) dell'NMOS = 1">
+            (W/L)<sub>p</sub> rif. =
+            <input type="number" id="opt-ratio" min="1" max="5" step="0.5" value="2">
+          </label>
+        </div>
+      </div>
+
+      <details class="syntax">
+        <summary>Come si scrivono le espressioni</summary>
+        <table>
+          <tbody>
+            <tr><th>NOT</th><td><code>not(A)</code> <code>!A</code> <code>~A</code> <code>A'</code></td></tr>
+            <tr><th>AND</th><td><code>AB</code> <code>A·B</code> <code>A*B</code> <code>A&amp;B</code> <code>A and B</code></td></tr>
+            <tr><th>OR</th><td><code>A + B</code> <code>A | B</code> <code>A or B</code></td></tr>
+            <tr><th>XOR</th><td><code>A ^ B</code> <code>A xor B</code></td></tr>
+            <tr><th>Funzioni</th><td><code>nand(A, B)</code> <code>nor(A, B, C)</code> <code>xnor(A, B)</code> <code>and(…)</code> <code>or(…)</code></td></tr>
+          </tbody>
+        </table>
+        <ul>
+          <li>Lettere adiacenti sono in AND: <code>BCD</code> = B·C·D.</li>
+          <li>Una variabile è una lettera seguita da eventuali cifre: <code>A1</code>, <code>S0</code>.</li>
+          <li>Precedenza: NOT, poi AND, poi XOR, poi OR. <code>Y =</code> iniziale facoltativo (cambia il nome dell’uscita).</li>
+        </ul>
+      </details>
+    </section>
+
+    <div class="layout">
+      <section class="card schematic-card" id="schematic-card">
+        <div class="card-head">
+          <h2>Schema a transistor</h2>
+          <div class="tools">
+            <label class="switch" title="Assegna valori agli ingressi ed evidenzia i transistor accesi">
+              <input type="checkbox" id="opt-sim">
+              <span class="track"></span>
+              <span>Simulazione</span>
+            </label>
+            <button type="button" class="btn ghost small" id="export-svg">SVG</button>
+            <button type="button" class="btn ghost small" id="export-png">PNG</button>
+            <button type="button" class="btn small" id="fullscreen" title="Schermo intero (tasto F)">Schermo intero</button>
+          </div>
+        </div>
+        <div class="sim-panel" id="sim-panel" hidden></div>
+        <div class="schematic" id="schematic"></div>
+        <div class="legend">
+          <span><svg width="26" height="20" viewBox="0 0 26 20" aria-hidden="true"><path d="M26 4H16V16H26M16 2V18M10 4V16M10 10H2" fill="none" stroke="currentColor" stroke-width="2"/></svg> NMOS</span>
+          <span><svg width="26" height="20" viewBox="0 0 26 20" aria-hidden="true"><path d="M26 4H16V16H26M16 2V18M10 4V16M2 10H1" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="6" cy="10" r="3.4" fill="none" stroke="currentColor" stroke-width="2"/></svg> PMOS</span>
+          <span class="sim-only"><i class="sw up"></i> cammino verso V<sub>DD</sub></span>
+          <span class="sim-only"><i class="sw down"></i> cammino verso GND</span>
+          <span class="size-only"><i class="sw size"></i> W/L normalizzato</span>
+        </div>
+      </section>
+
+      <aside class="side">
+        <section class="card" id="analysis"></section>
+        <section class="card" id="truth"></section>
+      </aside>
+    </div>
+  </main>
+
+  <footer>
+    Strumento didattico per il corso di Sistemi Integrati · logica CMOS statica complementare
+  </footer>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>

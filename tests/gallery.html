@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <title>Galleria · Porte CMOS</title>
+  <style>
+    body { font: 14px/1.4 "Segoe UI", Roboto, sans-serif; margin: 16px; background: #f3f4f8; color: #1e2330; }
+    .grid { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+    figure { margin: 0; background: #fff; border: 1px solid #e2e5ee; border-radius: 10px; padding: 8px; }
+    figcaption { font-family: Consolas, monospace; margin-bottom: 4px; }
+  </style>
+</head>
+<body>
+  <p>Controllo visivo del disegno. Parametri URL: <code>?sizing=1</code>, <code>?scale=1.5</code>, <code>?f=espr1|espr2</code>.</p>
+  <div class="grid" id="grid"></div>
+  <script type="module">
+    import { parse } from '../docs/js/parser.js';
+    import { synthesize } from '../docs/js/cmos.js';
+    import { renderCircuit, fixOverlines } from '../docs/js/render.js';
+
+    const params = new URLSearchParams(location.search);
+    const sizing = params.get('sizing') === '1';
+    const scale = Number(params.get('scale') || 1.3);
+    const exprs = params.get('f') ? params.get('f').split('|') : [
+      'Y = not(A + BCD)', 'not(A)', 'not(AB)', 'not(A+B)', 'not(AB + C)', 'not((A+B)(C+D))',
+      'A + B', "AB' + A'B", "S'A + SB", 'not(AB + C(A + B))', 'not(A1B1 + A2B2)', 'not(A(B + C(D + E)) + F)',
+    ];
+    const grid = document.getElementById('grid');
+    for (const src of exprs) {
+      const fig = document.createElement('figure');
+      try {
+        const { ast, output } = parse(src);
+        const r = synthesize(ast, output);
+        fig.innerHTML = `<figcaption>${src} · ${r.counts.total}T</figcaption>${renderCircuit(r, { sizing, ratio: 2 })}`;
+        const svg = fig.querySelector('svg');
+        svg.setAttribute('width', svg.viewBox.baseVal.width * scale);
+        svg.setAttribute('height', svg.viewBox.baseVal.height * scale);
+        grid.append(fig);
+        fixOverlines(svg);
+      } catch (e) {
+        fig.textContent = `${src}: ${e.message}`;
+        grid.append(fig);
+      }
+    }
+  </script>
+</body>
+</html>

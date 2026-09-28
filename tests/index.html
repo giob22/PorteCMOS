@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <title>Test · Porte CMOS</title>
+  <style>
+    body { font: 15px/1.5 "Segoe UI", Roboto, sans-serif; margin: 24px; color: #1e2330; }
+    li { margin: 2px 0; }
+    .ok { color: #15803d; }
+    .ko { color: #b42318; }
+    pre { margin: 2px 0 6px 18px; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <h1>Test</h1>
+  <p id="summary">Esecuzione…</p>
+  <ul id="list"></ul>
+  <script type="module">
+    import { run } from './suite.js';
+    const results = run();
+    const list = document.getElementById('list');
+    for (const r of results) {
+      const li = document.createElement('li');
+      li.className = r.ok ? 'ok' : 'ko';
+      li.textContent = `${r.ok ? '✓' : '✗'} ${r.name}`;
+      if (!r.ok) {
+        const pre = document.createElement('pre');
+        pre.textContent = r.error;
+        li.append(pre);
+      }
+      list.append(li);
+    }
+    const failed = results.filter((r) => !r.ok).length;
+    document.getElementById('summary').textContent = `${results.length - failed}/${results.length} test superati`;
+    document.title = failed ? `✗ ${failed} falliti` : '✓ tutti superati';
+  </script>
+</body>
+</html>
