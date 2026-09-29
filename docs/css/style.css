@@ -267,6 +267,30 @@ main {
 .legend .sw.down { background: var(--down); }
 .legend .sw.size { background: var(--size); }
 .legend .sim-only, .legend .size-only { display: none; }
+.legend .move-hint { margin-left: auto; font-style: italic; }
+
+/* MOSFET spostabili */
+.schematic .cm-tr[data-movable] { cursor: pointer; }
+.schematic .cm-tr[data-movable]:hover .cm-w,
+.schematic .cm-tr[data-movable]:hover .cm-bubble { stroke: var(--accent); }
+.schematic .cm-tr[data-movable]:hover .cm-txt { fill: var(--accent); }
+
+.order-panel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  background: var(--accent-soft);
+  border: 1px solid #d5d9fb;
+  border-radius: 10px;
+}
+.order-info { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; font-size: .92rem; }
+.order-info .math { font-size: 1.05rem; }
+.order-info .where { color: var(--muted); font-size: .88rem; }
+.order-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-left: auto; }
+.btn:disabled, .btn:disabled:hover { opacity: .4; cursor: default; color: var(--ink); border-color: #cfd3e0; }
 .sim-on .legend .sim-only, .size-on .legend .size-only { display: inline-flex; }
 
 .sim-panel {

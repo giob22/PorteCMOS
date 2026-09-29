@@ -9,8 +9,10 @@
 //
 // Reti serie-parallelo:
 //   { type: 'T', kind: 'n' | 'p', input, neg, id }   transistor
-//   { type: 'S', children }                          serie
-//   { type: 'P', children }                          parallelo
+//   { type: 'S', id, children }                      serie
+//   { type: 'P', id, children }                      parallelo
+// Gli id dipendono solo dalla funzione F, quindi restano stabili tra un
+// disegno e l'altro e permettono di ricordare l'ordine scelto dall'utente.
 
 import { variables, evaluate, toNNF, simplify, dual } from './logic.js';
 
@@ -29,17 +31,69 @@ export function inputVector(inputs, index) {
 }
 
 function buildNetwork(f, kind, prefix) {
-  let count = 0;
+  let leaves = 0;
+  let groups = 0;
   const build = (n) => {
     switch (n.type) {
-      case 'var': return { type: 'T', kind, input: n.name, neg: false, id: `${prefix}${++count}` };
-      case 'not': return { type: 'T', kind, input: n.arg.name, neg: true, id: `${prefix}${++count}` };
-      case 'and': return { type: 'S', children: n.args.map(build) };
-      case 'or': return { type: 'P', children: n.args.map(build) };
+      case 'var': return { type: 'T', kind, input: n.name, neg: false, id: `${prefix}${++leaves}` };
+      case 'not': return { type: 'T', kind, input: n.arg.name, neg: true, id: `${prefix}${++leaves}` };
+      case 'and': return { type: 'S', id: `${prefix}g${++groups}`, children: n.args.map(build) };
+      case 'or': return { type: 'P', id: `${prefix}g${++groups}`, children: n.args.map(build) };
       default: throw new Error(`Nodo inatteso nella NNF: ${n.type}`);
     }
   };
   return build(f);
+}
+
+// ------------------------------------------------------ ordine dei rami
+//
+// L'ordine personalizzato è una mappa { idGruppo: permutazione }, dove la
+// permutazione elenca, nell'ordine in cui vanno disegnati, gli indici dei
+// figli nell'ordine originale. Serie: dall'alto in basso; parallelo: da
+// sinistra a destra.
+
+const isPermutation = (p, n) => Array.isArray(p) && p.length === n &&
+  [...p].sort((a, b) => a - b).every((v, i) => v === i);
+
+/** Copia della rete con i figli dei gruppi riordinati secondo `perms`. */
+export function applyOrder(net, perms) {
+  if (net.type === 'T') return net;
+  const kids = net.children.map((c) => applyOrder(c, perms));
+  const p = perms[net.id];
+  return { ...net, children: isPermutation(p, kids.length) ? p.map((i) => kids[i]) : kids };
+}
+
+/** Tiene solo le permutazioni valide per le reti date e diverse dall'identità. */
+export function normalizeOrder(nets, perms) {
+  const out = {};
+  const visit = (n) => {
+    if (n.type === 'T') return;
+    const p = perms[n.id];
+    if (isPermutation(p, n.children.length) && p.some((v, i) => v !== i)) out[n.id] = p;
+    n.children.forEach(visit);
+  };
+  nets.forEach(visit);
+  return out;
+}
+
+/** Cerca un nodo per id: { node, parent, index }, con parent null per la radice. */
+export function locate(net, id, parent = null, index = 0) {
+  if (net.id === id) return { node: net, parent, index };
+  if (net.type === 'T') return null;
+  for (let i = 0; i < net.children.length; i++) {
+    const found = locate(net.children[i], id, net, i);
+    if (found) return found;
+  }
+  return null;
+}
+
+/** Espressione (AND = serie, OR = parallelo) che descrive la struttura della rete. */
+export function networkExpr(net) {
+  if (net.type === 'T') {
+    const v = { type: 'var', name: net.input };
+    return net.neg ? { type: 'not', arg: v } : v;
+  }
+  return { type: net.type === 'S' ? 'and' : 'or', args: net.children.map(networkExpr) };
 }
 
 function literals(f) {

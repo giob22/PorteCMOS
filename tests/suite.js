@@ -2,8 +2,10 @@
 // nel browser (tests/index.html).
 
 import { parse, ParseError } from '../docs/js/parser.js';
-import { evaluate, variables } from '../docs/js/logic.js';
-import { synthesize, truthTable, sizeNetwork, inputVector } from '../docs/js/cmos.js';
+import { evaluate, variables, toHTML } from '../docs/js/logic.js';
+import {
+  synthesize, truthTable, sizeNetwork, inputVector, applyOrder, normalizeOrder, locate, networkExpr,
+} from '../docs/js/cmos.js';
 import { renderCircuit } from '../docs/js/render.js';
 
 const tests = [];
@@ -225,6 +227,47 @@ test('dimensionamento W/L', () => {
   eq(sizes('not(A+B)'), ['A=1 B=1', 'A=4 B=4']);
   eq(sizes('not(A + BCD)'), ['A=1 B=3 C=3 D=3', 'A=4 B=4 C=4 D=4']);
   eq(sizes('not(A(B+C))', 2.5), ['A=2 B=2 C=2', 'A=2.5 B=5 C=5']);
+});
+
+// ------------------------------------------------------------ ordine dei rami
+
+test('ordine: permutazioni applicate a serie e parallelo', () => {
+  const r = synth('Y = not(A + BCD)');
+  // PDN: P(A, S(B,C,D)) -> gruppi Ng1 (parallelo) e Ng2 (serie)
+  eq([r.pdn.id, r.pdn.children[1].id], ['Ng1', 'Ng2']);
+  const perms = { Ng1: [1, 0], Ng2: [2, 0, 1], Pg2: [1, 2, 0] };
+  const pdn = applyOrder(r.pdn, perms);
+  const pun = applyOrder(r.pun, perms);
+  eq(shape(pdn), 'P(S(D,B,C),A)');
+  eq(shape(pun), 'S(A,P(C,D,B))');
+  eq(shape(r.pdn), 'P(A,S(B,C,D))', 'la rete originale non va modificata:');
+  eq(toHTML(networkExpr(pdn)), 'DBC + A');
+  checkCircuit({ ...r, pdn, pun }, 'rete riordinata');
+});
+
+test('ordine: permutazioni non valide ignorate', () => {
+  const r = synth('not(AB + C)');
+  const perms = { Ng1: [0, 0], Ng2: [1, 0, 2], Ng9: [1, 0], Pg1: [1, 0], Pg2: [0, 1] };
+  // Ng1: non è una permutazione; Ng2: lunghezza errata; Ng9: non esiste; Pg2: identità
+  eq(normalizeOrder([r.pdn, r.pun], perms), { Pg1: [1, 0] });
+  eq(shape(applyOrder(r.pdn, perms)), 'P(S(A,B),C)');
+});
+
+test('ordine: ricerca dei nodi', () => {
+  const r = synth('Y = not(A + BCD)');
+  const found = locate(r.pdn, 'N3'); // C, secondo della serie B-C-D
+  eq([found.node.input, found.parent.id, found.index], ['C', 'Ng2', 1]);
+  eq(locate(r.pdn, 'Ng1').parent, null);
+  eq(locate(r.pdn, 'P1'), null);
+});
+
+test('ordine: il disegno segue la permutazione', () => {
+  const r = synth('not(AB)');
+  const svg = (pdn) => renderCircuit({ ...r, pdn });
+  const order = (s) => [...s.matchAll(/data-id="(N\d)"/g)].map((m) => m[1]).join(',');
+  eq(order(svg(r.pdn)), 'N1,N2');
+  eq(order(svg(applyOrder(r.pdn, { Ng1: [1, 0] }))), 'N2,N1');
+  assert(/data-node="Ng1"/.test(svg(r.pdn)), 'manca il gruppo della serie');
 });
 
 // ---------------------------------------------------------------------- disegno

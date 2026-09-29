@@ -20,6 +20,9 @@ transistor della corrispondente porta CMOS statica complementare.
 - **Tabella di verità** con stato di PUN/PDN e verifica automatica del circuito.
 - **Simulazione**: si assegnano gli ingressi (o si clicca una riga della tabella) e
   lo schema evidenzia i transistor accesi e il cammino verso V<sub>DD</sub> o GND.
+- **Ordine dei MOSFET modificabile**: clic su un transistor e frecce (o pulsanti)
+  per spostarlo nella sua serie o nel suo parallelo; *Seleziona blocco* sposta un
+  ramo intero. L’ordine resta nel link condiviso e le formule lo seguono.
 - **Copia immagine** (tasto `C`): lo schema va negli appunti come PNG, pronto da
   incollare con Ctrl+V in OneNote, Word, Notion, GoodNotes…
 - **Schermo intero** (tasto `F`) per la proiezione in aula, esportazione **SVG/PNG**,

@@ -109,7 +109,7 @@ const sizeTagWidth = (value) => textWidth(fmtNum(value), G.sizeFont) + 10;
 
 // ---------------------------------------------------------------- transistor
 
-function leafLayout(t, ctx, { showLabel = true } = {}) {
+function leafLayout(t, ctx, { showLabel = true, movable = false } = {}) {
   const size = ctx.sizes ? ctx.sizes.get(t.id) : null;
   const left = G.gateEnd + (showLabel ? G.labelGap + labelWidth(t.input) + 4 : 2);
   const right = size != null ? 8 + sizeTagWidth(size) + 6 : 10;
@@ -121,7 +121,9 @@ function leafLayout(t, ctx, { showLabel = true } = {}) {
       const x = ox + left;
       const y = oy;
       const yg = y + G.leafH / 2;
-      out.push(`<g class="cm-tr cm-${t.kind}" data-id="${t.id}">`);
+      out.push(`<g class="cm-tr cm-${t.kind}" data-id="${t.id}"${movable ? ' data-movable="1"' : ''}>`);
+      // area invisibile che rende cliccabile tutto il simbolo, etichetta compresa
+      if (movable) out.push(`<rect x="${ox}" y="${y}" width="${left + 6}" height="${G.leafH}" fill="transparent"/>`);
       path(out, `M${x} ${y}V${y + G.lead}H${x - G.chX}M${x - G.chX} ${y + G.leafH - G.lead}H${x}V${y + G.leafH}`);
       path(out, `M${x - G.chX} ${y + 9}V${y + G.leafH - 9}`, 'cm-w cm-thick');
       path(out, `M${x - G.gateX} ${y + G.lead}V${y + G.leafH - G.lead}`, 'cm-w cm-thick');
@@ -140,8 +142,17 @@ function leafLayout(t, ctx, { showLabel = true } = {}) {
 
 // ---------------------------------------------------------- serie / parallelo
 
+// Ogni gruppo è racchiuso in <g data-node> per poterlo evidenziare quando è selezionato.
+function groupDraw(net, draw) {
+  return (ox, oy, out) => {
+    out.push(`<g class="cm-grp" data-node="${net.id}">`);
+    draw(ox, oy, out);
+    out.push('</g>');
+  };
+}
+
 function networkLayout(net, ctx) {
-  if (net.type === 'T') return leafLayout(net, ctx);
+  if (net.type === 'T') return leafLayout(net, ctx, { movable: true });
   const kids = net.children.map((c) => networkLayout(c, ctx));
 
   if (net.type === 'S') {
@@ -151,13 +162,13 @@ function networkLayout(net, ctx) {
       w: sx + right,
       h: kids.reduce((a, k) => a + k.h, 0),
       sx,
-      draw(ox, oy, out) {
+      draw: groupDraw(net, (ox, oy, out) => {
         let y = oy;
         for (const k of kids) {
           k.draw(ox + sx - k.sx, y, out);
           y += k.h;
         }
-      },
+      }),
     };
   }
 
@@ -175,7 +186,7 @@ function networkLayout(net, ctx) {
     w: cursor - G.gapP,
     h: hMax + 2 * G.bus,
     sx,
-    draw(ox, oy, out) {
+    draw: groupDraw(net, (ox, oy, out) => {
       const yTop = oy + G.bus;
       const yBot = oy + G.bus + hMax;
       const first = ox + spines[0];
@@ -194,7 +205,7 @@ function networkLayout(net, ctx) {
       });
       dot(out, ox + sx, yTop);
       dot(out, ox + sx, yBot);
-    },
+    }),
   };
 }
 

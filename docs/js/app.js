@@ -1,6 +1,8 @@
 import { parse, ParseError } from './parser.js';
-import { toHTML, varHTML, dual, toNNF, simplify } from './logic.js';
-import { synthesize, simulate, truthTable, depth } from './cmos.js';
+import { toHTML, varHTML, toNNF, simplify } from './logic.js';
+import {
+  synthesize, simulate, truthTable, depth, applyOrder, normalizeOrder, locate, networkExpr,
+} from './cmos.js';
 import { renderCircuit, fixOverlines } from './render.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -40,8 +42,23 @@ const state = {
   ratio: 2,
   sim: false,
   env: {},
-  result: null,
+  base: null, // risultato di synthesize(), reti nell'ordine originale
+  result: null, // come base, ma con le reti nell'ordine scelto dall'utente
+  perms: {}, // ordine personalizzato dei rami (vedi applyOrder)
+  orderSig: null, // funzione a cui si riferisce perms; null = da confermare
+  selected: null, // id del transistor o del blocco selezionato
 };
+
+const encodeOrder = (perms) => Object.entries(perms).map(([id, p]) => [id, ...p].join('.')).join('~');
+
+function decodeOrder(text) {
+  const perms = {};
+  for (const part of text.split('~')) {
+    const [id, ...idx] = part.split('.');
+    if (/^[NP]g\d+$/.test(id) && idx.length) perms[id] = idx.map(Number);
+  }
+  return perms;
+}
 
 // ------------------------------------------------------------ persistenza
 
@@ -55,6 +72,7 @@ function loadState() {
   const params = new URLSearchParams(location.hash.slice(1));
   if (params.get('f')) state.expr = params.get('f');
   if (params.get('m') in MODE_LABELS) state.mode = params.get('m');
+  if (params.get('o')) state.perms = decodeOrder(params.get('o'));
 }
 
 function saveState() {
@@ -64,6 +82,7 @@ function saveState() {
   } catch { /* storage non disponibile */ }
   const params = new URLSearchParams({ f: state.expr });
   if (state.mode !== 'auto') params.set('m', state.mode);
+  if (Object.keys(state.perms).length) params.set('o', encodeOrder(state.perms));
   history.replaceState(null, '', `#${params}`);
 }
 
@@ -109,7 +128,18 @@ function update() {
   $('#error').hidden = true;
   $('#schematic').classList.remove('stale');
 
-  state.result = result;
+  // l'ordine personalizzato vale finché non cambia la funzione realizzata
+  const sig = `${result.mode}|${JSON.stringify(result.F)}`;
+  if (state.orderSig !== null && state.orderSig !== sig) {
+    state.perms = {};
+    state.selected = null;
+  }
+  state.orderSig = sig;
+  state.base = result;
+  state.perms = normalizeOrder([result.pdn, result.pun], state.perms);
+  state.result = orderedResult();
+  if (state.selected && !findSelected()) state.selected = null;
+
   const env = {};
   result.inputs.forEach((v) => { env[v] = state.env[v] ?? 0; });
   state.env = env;
@@ -118,7 +148,13 @@ function update() {
   renderAnalysis();
   renderTruthTable();
   renderSimPanel();
+  renderOrderPanel();
   saveState();
+}
+
+function orderedResult() {
+  const { base, perms } = state;
+  return { ...base, pdn: applyOrder(base.pdn, perms), pun: applyOrder(base.pun, perms) };
 }
 
 function showError(err) {
@@ -146,7 +182,119 @@ function drawCircuit() {
   svg.style.maxWidth = `${svg.viewBox.baseVal.width * 1.7}px`;
   fixOverlines(svg);
   applySimulation();
+  drawSelection();
   $('#schematic-card').classList.toggle('size-on', state.sizing);
+}
+
+// ------------------------------------------------------ ordine dei MOSFET
+
+function findSelected() {
+  if (!state.selected || !state.result) return null;
+  for (const net of ['pdn', 'pun']) {
+    const found = locate(state.result[net], state.selected);
+    if (found) return { ...found, net };
+  }
+  return null;
+}
+
+function select(id) {
+  state.selected = id;
+  drawSelection();
+  renderOrderPanel();
+}
+
+/** Rettangolo tratteggiato attorno all'elemento selezionato (escluso dalle esportazioni). */
+function drawSelection() {
+  const svg = $('#schematic svg');
+  if (!svg) return;
+  svg.querySelector('.cm-selbox')?.remove();
+  if (!state.selected) return;
+  const el = svg.querySelector(`[data-id="${state.selected}"], [data-node="${state.selected}"]`);
+  if (!el) return;
+  const box = el.getBBox();
+  const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+  const attrs = {
+    class: 'cm-selbox', x: box.x - 7, y: box.y - 5, width: box.width + 14, height: box.height + 10, rx: 8,
+    fill: 'rgba(67, 56, 202, .08)', stroke: '#4338ca', 'stroke-width': 1.6, 'stroke-dasharray': '6 4',
+    'pointer-events': 'none',
+  };
+  for (const [k, v] of Object.entries(attrs)) rect.setAttribute(k, v);
+  svg.insertBefore(rect, svg.children[2] || null); // dopo <style> e sfondo, dietro allo schema
+}
+
+function moveSelected(delta) {
+  const sel = findSelected();
+  if (!sel || !sel.parent) return;
+  const { parent, index } = sel;
+  const target = index + delta;
+  if (target < 0 || target >= parent.children.length) return;
+  const perm = state.perms[parent.id] ? [...state.perms[parent.id]] : parent.children.map((_, k) => k);
+  [perm[index], perm[target]] = [perm[target], perm[index]];
+  state.perms[parent.id] = perm;
+  orderChanged();
+}
+
+function orderChanged() {
+  state.perms = normalizeOrder([state.base.pdn, state.base.pun], state.perms);
+  state.result = orderedResult();
+  drawCircuit();
+  renderAnalysis();
+  renderOrderPanel();
+  saveState();
+}
+
+const literalHTML = (t) => (t.neg ? `<span class="ol">${varHTML(t.input)}</span>` : varHTML(t.input));
+
+// Struttura di un blocco: "B – C – D" per la serie, "B ∥ C" per il parallelo
+function blockHTML(n, nested = false) {
+  if (n.type === 'T') return literalHTML(n);
+  const s = n.children.map((c) => blockHTML(c, true)).join(n.type === 'S' ? ' – ' : ' ∥ ');
+  return nested ? `(${s})` : s;
+}
+
+function renderOrderPanel() {
+  const panel = $('#order-panel');
+  const custom = Object.keys(state.perms).length > 0;
+  const resetBtn = custom
+    ? '<button type="button" class="btn ghost small" data-act="reset" title="Torna all’ordine ricavato dall’espressione">Ripristina ordine</button>'
+    : '';
+  const sel = findSelected();
+  if (!sel) {
+    panel.hidden = !custom;
+    panel.innerHTML = `<span class="order-info">Ordine dei MOSFET personalizzato</span><div class="order-actions">${resetBtn}</div>`;
+    return;
+  }
+
+  const { node, parent, index, net } = sel;
+  const pdn = net === 'pdn';
+  const tag = `<span class="tag ${pdn ? 'n' : 'p'}">${pdn ? 'NMOS' : 'PMOS'}</span>`;
+  const what = node.type === 'T'
+    ? `${tag} <b class="math">${literalHTML(node)}</b>`
+    : `${tag} <span>blocco ${node.type === 'S' ? 'serie' : 'parallelo'}</span> <b class="math">${blockHTML(node)}</b>`;
+
+  let where;
+  if (!parent) {
+    where = 'è l’intera rete: non ha rami con cui scambiarsi';
+  } else if (parent.type === 'S') {
+    where = `in serie, posizione ${index + 1} di ${parent.children.length} ${pdn ? '(dall’uscita verso GND)' : '(da V<sub>DD</sub> verso l’uscita)'}`;
+  } else {
+    where = `in parallelo, ramo ${index + 1} di ${parent.children.length} (da sinistra)`;
+  }
+
+  const series = !parent || parent.type === 'S';
+  const last = parent ? parent.children.length - 1 : 0;
+  const hasBlock = parent && locate(state.result[net], parent.id).parent;
+  panel.hidden = false;
+  panel.innerHTML = `
+    <div class="order-info">${what}<span class="where">rete di pull-${pdn ? 'down' : 'up'} · ${where}</span></div>
+    <div class="order-actions">
+      <button type="button" class="btn ghost small" data-act="prev" ${parent && index > 0 ? '' : 'disabled'}>${series ? '↑ Su' : '← Sinistra'}</button>
+      <button type="button" class="btn ghost small" data-act="next" ${parent && index < last ? '' : 'disabled'}>${series ? '↓ Giù' : '→ Destra'}</button>
+      <button type="button" class="btn ghost small" data-act="parent" ${hasBlock ? '' : 'disabled'}
+        title="Seleziona il blocco che contiene questo elemento, per spostarlo tutto insieme">Seleziona blocco</button>
+      ${resetBtn}
+      <button type="button" class="btn ghost small" data-act="close" title="Deseleziona (Esc)" aria-label="Deseleziona">✕</button>
+    </div>`;
 }
 
 // ------------------------------------------------------------- simulazione
@@ -222,7 +370,9 @@ function renderAnalysis() {
   const out = varHTML(r.output);
   const outBar = `<span class="ol">${out}</span>`;
   const node = r.mode === 'outinv' ? outBar : out;
-  const F = toHTML(r.F);
+  // le formule seguono l'ordine dei rami scelto per il disegno
+  const fExpr = networkExpr(r.pdn);
+  const F = toHTML(fExpr);
   const nmos = r.counts.total / 2; // ogni NMOS ha il suo PMOS complementare
 
   let intro;
@@ -257,9 +407,9 @@ function renderAnalysis() {
 
     <h3><span class="tag p">PMOS</span> Rete di pull-up</h3>
     <p>Tra V<sub>DD</sub> e ${node}: rete duale (serie ↔ parallelo) con la struttura</p>
-    <div class="formula math">${toHTML(dual(r.F))}</div>
+    <div class="formula math">${toHTML(networkExpr(r.pun))}</div>
     <p>I PMOS conducono con ingresso a 0, quindi la rete conduce quando
-      <span class="math"><span class="ol">F</span> = ${toHTML(simplify(toNNF(r.F, true)))}</span> = 1.</p>
+      <span class="math"><span class="ol">F</span> = ${toHTML(simplify(toNNF(fExpr, true)))}</span> = 1.</p>
     ${negated}
 
     <div class="stats">
@@ -315,6 +465,7 @@ function exportSVGText() {
   if (!svg) return null;
   const clone = svg.cloneNode(true);
   clone.removeAttribute('style');
+  clone.querySelectorAll('.cm-selbox').forEach((el) => el.remove());
   return `<?xml version="1.0" encoding="UTF-8"?>\n${new XMLSerializer().serializeToString(clone)}`;
 }
 
@@ -494,6 +645,32 @@ function init() {
     else renderSimPanel();
   });
 
+  // clic su un MOSFET delle reti: lo seleziona (un secondo clic lo deseleziona)
+  $('#schematic').addEventListener('click', (e) => {
+    const tr = e.target.closest('[data-movable]');
+    if (tr) select(state.selected === tr.dataset.id ? null : tr.dataset.id);
+    else if (state.selected) select(null);
+  });
+
+  $('#order-panel').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-act]');
+    if (!b) return;
+    switch (b.dataset.act) {
+      case 'prev': moveSelected(-1); break;
+      case 'next': moveSelected(1); break;
+      case 'parent': {
+        const sel = findSelected();
+        if (sel && sel.parent) select(sel.parent.id);
+        break;
+      }
+      case 'reset':
+        state.perms = {};
+        orderChanged();
+        break;
+      default: select(null);
+    }
+  });
+
   $('#export-svg').addEventListener('click', exportSVG);
   $('#export-png').addEventListener('click', exportPNG);
   $('#copy-img').addEventListener('click', copyImage);
@@ -501,9 +678,19 @@ function init() {
   document.addEventListener('fullscreenchange', () => {
     $('#fullscreen').textContent = document.fullscreenElement ? 'Esci (Esc)' : 'Schermo intero';
   });
+  const ARROWS = { ArrowUp: -1, ArrowLeft: -1, ArrowDown: 1, ArrowRight: 1 };
   document.addEventListener('keydown', (e) => {
-    const typing = e.target.closest('input, textarea, select');
+    const typing = e.target.closest?.('input, textarea, select');
     if (typing || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (state.selected && e.key in ARROWS) {
+      e.preventDefault();
+      moveSelected(ARROWS[e.key]);
+      return;
+    }
+    if (state.selected && e.key === 'Escape') {
+      select(null);
+      return;
+    }
     const key = e.key.toLowerCase();
     if (key === 'f') toggleFullscreen();
     else if (key === 'c') copyImage();
@@ -520,9 +707,13 @@ function init() {
   });
 
   window.addEventListener('hashchange', () => {
-    const f = new URLSearchParams(location.hash.slice(1)).get('f');
-    if (f && f !== state.expr) {
+    const params = new URLSearchParams(location.hash.slice(1));
+    const f = params.get('f');
+    const o = params.get('o') || '';
+    if (f && (f !== state.expr || o !== encodeOrder(state.perms))) {
       state.expr = f;
+      state.perms = decodeOrder(o);
+      state.orderSig = null; // l'ordine del link vale per la nuova funzione
       syncControls();
       update();
     }
