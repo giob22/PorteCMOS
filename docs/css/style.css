@@ -378,6 +378,14 @@ main {
 .stat span { font-size: .78rem; color: var(--muted); }
 .note { font-size: .86rem !important; }
 
+.table-wrap.effort { margin: 8px 0; max-height: none; }
+.effort .tt tbody tr { cursor: default; }
+.effort .tt tbody tr:hover { background: none; }
+.effort .tt td.math { font-family: var(--font); font-weight: 600; }
+.effort .tt td.g b { color: var(--size); }
+.effort .tt .approx { color: var(--muted); font-size: .82rem; margin-left: 4px; }
+.effort-hint { margin-top: 12px !important; }
+
 /* ------------------------------------------------------------- truth table */
 
 .verify {

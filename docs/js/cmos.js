@@ -195,6 +195,34 @@ export function sizeNetwork(net, unit) {
   return sizes;
 }
 
+/**
+ * Sforzo logico di ogni ingresso della porta dimensionata:
+ *   g = C_in / C_inv,  C_in = somma dei W/L dei transistor pilotati dal segnale,
+ *   C_inv = 1 + ratio (invertitore di riferimento: NMOS 1, PMOS ratio).
+ * Un ingresso negato (A') è un segnale distinto da A.
+ * @returns {Array<{ input, neg, wn, wp, cin, cinv, g }>} ordinati per nome, A prima di A'
+ */
+export function logicalEffort(result, ratio) {
+  const sizes = new Map([...sizeNetwork(result.pdn, 1), ...sizeNetwork(result.pun, ratio)]);
+  const signals = new Map();
+  const walk = (n) => {
+    if (n.type !== 'T') {
+      n.children.forEach(walk);
+      return;
+    }
+    const k = `${n.input}${n.neg ? "'" : ''}`;
+    if (!signals.has(k)) signals.set(k, { input: n.input, neg: n.neg, wn: 0, wp: 0 });
+    signals.get(k)[n.kind === 'n' ? 'wn' : 'wp'] += sizes.get(n.id);
+  };
+  walk(result.pdn);
+  walk(result.pun);
+  const cinv = 1 + ratio;
+  const order = (s) => result.inputs.indexOf(s.input) * 2 + (s.neg ? 1 : 0);
+  return [...signals.values()]
+    .sort((a, b) => order(a) - order(b))
+    .map((s) => ({ ...s, cin: s.wn + s.wp, cinv, g: (s.wn + s.wp) / cinv }));
+}
+
 export function conducts(net, env) {
   switch (net.type) {
     case 'T': {

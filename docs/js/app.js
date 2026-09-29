@@ -1,7 +1,7 @@
 import { parse, ParseError } from './parser.js';
 import { toHTML, varHTML, toNNF, simplify } from './logic.js';
 import {
-  synthesize, simulate, truthTable, depth, applyOrder, normalizeOrder, locate, networkExpr,
+  synthesize, simulate, truthTable, depth, applyOrder, normalizeOrder, locate, networkExpr, logicalEffort,
 } from './cmos.js';
 import { renderCircuit, fixOverlines } from './render.js';
 
@@ -418,7 +418,52 @@ function renderAnalysis() {
       <div class="stat"><b>${nmos} + ${nmos}</b><span>NMOS + PMOS</span></div>
       <div class="stat"><b>${depth(r.pdn)} / ${depth(r.pun)}</b><span>max in serie PDN / PUN</span></div>
     </div>
-    ${altNote}`;
+    ${altNote}
+    ${effortHTML(r)}`;
+}
+
+// --------------------------------------------------------- sforzo logico
+
+const gcd = (a, b) => (b ? gcd(b, a % b) : a);
+const fmtNum = (x) => x.toLocaleString('it-IT', { maximumFractionDigits: 2 });
+
+/** num/den come frazione ridotta (4/3), o intero se il denominatore è 1. */
+function fraction(num, den) {
+  const a = Math.round(num * 100);
+  const b = Math.round(den * 100);
+  const d = gcd(a, b);
+  return b / d === 1 ? String(a / d) : `${a / d}/${b / d}`;
+}
+
+function effortHTML(r) {
+  if (!state.sizing) {
+    return '<p class="note effort-hint">Attiva il <b>dimensionamento W/L</b> per calcolare lo sforzo logico g di ogni ingresso.</p>';
+  }
+  const rows = logicalEffort(r, state.ratio);
+  const cinv = fmtNum(1 + state.ratio);
+  const body = rows.map((s) => {
+    const name = s.neg ? `<span class="ol">${varHTML(s.input)}</span>` : varHTML(s.input);
+    const exact = fraction(s.cin, s.cinv);
+    const approx = exact.includes('/') ? ` <span class="approx">≈ ${fmtNum(s.g)}</span>` : '';
+    return `<tr><td class="math">${name}</td><td>${fmtNum(s.wn)}</td><td>${fmtNum(s.wp)}</td>
+      <td>${fmtNum(s.cin)}</td><td class="g"><b>${exact}</b>${approx}</td></tr>`;
+  }).join('');
+  const inverters = r.mode === 'outinv' || (r.inverted.length && !r.complementsAvailable)
+    ? '<p class="note">Gli invertitori d’ingresso e d’uscita sono dimensionati come quello di riferimento: g = 1.</p>'
+    : '';
+  const gateLabel = r.mode === 'outinv' ? 'della porta complessa' : 'della porta';
+  return `
+    <h3>Sforzo logico g</h3>
+    <p>Per ogni ingresso ${gateLabel}: g = C<sub>in</sub> / C<sub>inv</sub>, dove C<sub>in</sub> è la somma dei
+      W/L dei transistor pilotati dal segnale e C<sub>inv</sub> = 1 + ${fmtNum(state.ratio)} = ${cinv}
+      è l’ingresso dell’invertitore di riferimento.</p>
+    <div class="table-wrap effort">
+      <table class="tt">
+        <thead><tr><th>Segnale</th><th>W<sub>n</sub></th><th>W<sub>p</sub></th><th>C<sub>in</sub></th><th>g</th></tr></thead>
+        <tbody>${body}</tbody>
+      </table>
+    </div>
+    ${inverters}`;
 }
 
 // ------------------------------------------------------- tabella di verità

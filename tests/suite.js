@@ -5,6 +5,7 @@ import { parse, ParseError } from '../docs/js/parser.js';
 import { evaluate, variables, toHTML, varHTML } from '../docs/js/logic.js';
 import {
   synthesize, truthTable, sizeNetwork, inputVector, applyOrder, normalizeOrder, locate, networkExpr,
+  logicalEffort,
 } from '../docs/js/cmos.js';
 import { renderCircuit } from '../docs/js/render.js';
 
@@ -251,6 +252,25 @@ test('dimensionamento W/L', () => {
   eq(sizes('not(A+B)'), ['A=1 B=1', 'A=4 B=4']);
   eq(sizes('not(A + BCD)'), ['A=1 B=3 C=3 D=3', 'A=4 B=4 C=4 D=4']);
   eq(sizes('not(A(B+C))', 2.5), ['A=2 B=2 C=2', 'A=2.5 B=5 C=5']);
+});
+
+test('sforzo logico g', () => {
+  const g = (src, ratio = 2) => logicalEffort(synth(src), ratio)
+    .map((s) => `${s.input}${s.neg ? "'" : ''}=${s.wn}+${s.wp}=${Math.round(s.g * 1000) / 1000}`)
+    .join(' ');
+  eq(g('not(A)'), 'A=1+2=1');
+  eq(g('not(AB)'), 'A=2+2=1.333 B=2+2=1.333'); // NAND2: 4/3
+  eq(g('not(A+B)'), 'A=1+4=1.667 B=1+4=1.667'); // NOR2: 5/3
+  eq(g('not(ABC)'), 'A=3+2=1.667 B=3+2=1.667 C=3+2=1.667'); // NAND3: 5/3
+  eq(g('not(A + BCD)'), 'A=1+4=1.667 B=3+4=2.333 C=3+4=2.333 D=3+4=2.333');
+  eq(g("AB' + A'B"), "A=2+4=2 A'=2+4=2 B=2+4=2 B'=2+4=2");
+  eq(g('not(AB)', 2.5), 'A=2+2.5=1.286 B=2+2.5=1.286'); // 4.5 / 3.5
+  // un segnale che pilota più transistor somma tutte le larghezze
+  eq(g('not(AB + C(A + B))'), 'A=4+12=5.333 B=4+12=5.333 C=2+4=2');
+  // l'ordine dei rami non cambia il dimensionamento
+  const r = synth('not(A + BCD)');
+  const reordered = { ...r, pdn: applyOrder(r.pdn, { Ng1: [1, 0], Ng2: [2, 1, 0] }) };
+  eq(logicalEffort(reordered, 2), logicalEffort(r, 2));
 });
 
 // ------------------------------------------------------------ ordine dei rami

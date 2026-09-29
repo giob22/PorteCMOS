@@ -17,6 +17,9 @@ transistor della corrispondente porta CMOS statica complementare.
 - **Dimensionamento W/L**: ogni transistor ha W/L = (W/L)<sub>rif</sub> × numero di
   transistor del cammino serie più lungo che lo attraversa, così il caso peggiore
   eguaglia l’invertitore di riferimento ((W/L)<sub>n</sub> = 1, (W/L)<sub>p</sub> impostabile).
+- **Sforzo logico g** di ogni ingresso della porta dimensionata:
+  g = C<sub>in</sub> / C<sub>inv</sub>, con C<sub>in</sub> somma dei W/L pilotati dal segnale e
+  C<sub>inv</sub> = 1 + (W/L)<sub>p</sub> (es. NAND2 → 4/3, NOR2 → 5/3 con (W/L)<sub>p</sub> = 2).
 - **Tabella di verità** con stato di PUN/PDN e verifica automatica del circuito.
 - **Simulazione**: si assegnano gli ingressi (o si clicca una riga della tabella) e
   lo schema evidenzia i transistor accesi e il cammino verso V<sub>DD</sub> o GND.
