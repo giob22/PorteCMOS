@@ -2,7 +2,7 @@
 // nel browser (tests/index.html).
 
 import { parse, ParseError } from '../docs/js/parser.js';
-import { evaluate, variables, toHTML } from '../docs/js/logic.js';
+import { evaluate, variables, toHTML, varHTML } from '../docs/js/logic.js';
 import {
   synthesize, truthTable, sizeNetwork, inputVector, applyOrder, normalizeOrder, locate, networkExpr,
 } from '../docs/js/cmos.js';
@@ -95,6 +95,30 @@ test('parser: nomi di uscita e variabili', () => {
   eq(variables(parse('A1B2 + A1\'').ast), ['A1', 'B2']);
   eq(variables(parse('x2 + x10 + x1').ast), ['x1', 'x2', 'x10']);
   eq(variables(parse('a + b').ast), ['a', 'b']);
+});
+
+test('parser: pedici', () => {
+  eq(variables(parse('A_{in}B + A_in\'').ast), ['A_in', 'B']);
+  eq(variables(parse('A_inB').ast), ['A_inB']);
+  eq(variables(parse('A_1 + A1 + B_{12}C').ast), ['A1', 'B12', 'C']);
+  eq(variables(parse('BC_en').ast), ['B', 'C_en']);
+  eq(variables(parse('not_1 + x').ast), ['n', 'o', 't1', 'x']);
+  eq(parse('Y_{out} = A').output, 'Y_out');
+  eq(parse('Y_out = A').output, 'Y_out');
+  eq(parse('Y_2 = A').output, 'Y2');
+  sameFunction('not(A_{in}B_{en})', "A_in' + B_en'");
+  ['A_', 'A_ + B', 'A_{}', 'A_{in', 'A_{i n}', 'A1_x', '_A'].forEach(expectParseError);
+});
+
+test('nomi con pedice: HTML e SVG', () => {
+  eq(varHTML('A_in'), 'A<sub>in</sub>');
+  eq(varHTML('A12'), 'A<sub>12</sub>');
+  eq(varHTML('Out'), 'Out');
+  eq(toHTML(parse('A_{in}B + C').ast), 'A<sub>in</sub>·B + C');
+  const r = synth('Y_{out} = not(A_{in} + B)');
+  const svg = renderCircuit(r);
+  assert(/>A<tspan[^>]*>in<\/tspan><\/text>/.test(svg), 'pedice del segnale mancante nello schema');
+  assert(/>Y<tspan[^>]*>out<\/tspan><\/text>/.test(svg), 'pedice dell’uscita mancante nello schema');
 });
 
 test('parser: errori con posizione', () => {

@@ -15,8 +15,12 @@
 //   XOR : A^B  A⊕B  A xor B  xor(A,B,...)
 //   nand(...)  nor(...)  xnor(...)
 //   Costanti 0 e 1, uscita opzionale "Y = ..."
-//   Variabili: una lettera seguita da eventuali cifre (A, B, x1, S0).
+//   Variabili: una lettera con un eventuale pedice: A, x1, A_1, A_in, A_{in}.
+//   Il pedice numerico può essere scritto anche senza "_" (A1 = A_1). Senza
+//   graffe il pedice prende tutte le lettere e cifre che seguono: A_inB è
+//   "A con pedice inB", mentre A_{in}B è A_in · B.
 //   Lettere adiacenti sono AND impliciti: BCD = B·C·D.
+//   Nomi canonici: "A1" per i pedici numerici, "A_in" per gli altri.
 
 const KEYWORDS = new Set(['not', 'and', 'or', 'xor', 'nand', 'nor', 'xnor']);
 
@@ -48,6 +52,29 @@ export class ParseError extends Error {
   }
 }
 
+/** Nome canonico: pedice numerico attaccato (A1), altrimenti con "_" (A_in). */
+const withSubscript = (base, sub) => (/^[0-9]+$/.test(sub) ? `${base}${sub}` : `${base}_${sub}`);
+
+/**
+ * Legge il pedice che inizia con "_" in src[i]: "_in" oppure "_{in}".
+ * @returns {{ sub: string, end: number }} end = indice dopo il pedice
+ */
+function readSubscript(src, i, offset) {
+  if (src[i + 1] === '{') {
+    const close = src.indexOf('}', i + 2);
+    if (close < 0) throw new ParseError('Pedice non chiuso: manca "}"', offset + i, 2);
+    const sub = src.slice(i + 2, close);
+    if (!/^[A-Za-z0-9]+$/.test(sub)) {
+      throw new ParseError('Il pedice può contenere solo lettere e cifre', offset + i, close - i + 1);
+    }
+    return { sub, end: close + 1 };
+  }
+  let j = i + 1;
+  while (j < src.length && /[A-Za-z0-9]/.test(src[j])) j++;
+  if (j === i + 1) throw new ParseError('Pedice vuoto dopo "_"', offset + i);
+  return { sub: src.slice(i + 1, j), end: j };
+}
+
 function tokenize(src, offset) {
   const tokens = [];
   let i = 0;
@@ -60,17 +87,29 @@ function tokenize(src, offset) {
       while (j < src.length && /[A-Za-z0-9]/.test(src[j])) j++;
       const word = src.slice(i, j);
       const lower = word.toLowerCase();
-      if (KEYWORDS.has(lower)) {
+      if (KEYWORDS.has(lower) && src[j] !== '_') {
         tokens.push({ t: 'kw', v: lower, pos: offset + i, len: j - i });
-      } else {
-        // "BCD" -> B, C, D ; "A1B2" -> A1, B2
-        const re = /[A-Za-z][0-9]*/g;
-        let m;
-        while ((m = re.exec(word))) {
-          tokens.push({ t: 'var', v: m[0], pos: offset + i + m.index, len: m[0].length });
-        }
+        i = j;
+        continue;
+      }
+      // "BCD" -> B, C, D ; "A1B2" -> A1, B2
+      const re = /[A-Za-z][0-9]*/g;
+      let m;
+      while ((m = re.exec(word))) {
+        tokens.push({ t: 'var', v: m[0], pos: offset + i + m.index, len: m[0].length });
       }
       i = j;
+      if (src[i] === '_') {
+        // il pedice si attacca all'ultima lettera: "BC_in" -> B, C_in
+        const last = tokens[tokens.length - 1];
+        if (last.v.length > 1) {
+          throw new ParseError(`"${last.v}" ha già un pedice numerico: scrivi ${last.v[0]}_{…}`, last.pos, last.len + 1);
+        }
+        const { sub, end } = readSubscript(src, i, offset);
+        last.v = withSubscript(last.v, sub);
+        last.len = end - (last.pos - offset);
+        i = end;
+      }
       continue;
     }
 
@@ -103,9 +142,11 @@ const describe = (tk) => `"${tk.v}"`;
 export function parse(input) {
   let output = 'Y';
   let offset = 0;
-  const m = /^\s*([A-Za-z][A-Za-z0-9_]*)\s*=/.exec(input);
+  // nome dell'uscita: anche di più lettere (Out), con pedice facoltativo (Y_out, Y_{out})
+  const m = /^\s*([A-Za-z][A-Za-z0-9]*)(?:_(?:\{([A-Za-z0-9]+)\}|([A-Za-z0-9]+)))?\s*=/.exec(input);
   if (m) {
-    output = m[1];
+    const sub = m[2] || m[3];
+    output = sub ? withSubscript(m[1], sub) : m[1];
     offset = m[0].length;
   }
   const body = input.slice(offset);

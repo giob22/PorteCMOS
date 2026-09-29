@@ -24,6 +24,7 @@ const EXAMPLES = [
   { name: 'XNOR', expr: 'Y = xnor(A, B)' },
   { name: 'MUX 2:1', expr: "Y = S'A + SB" },
   { name: 'Carry (maggioranza)', expr: 'Y = not(AB + C(A + B))' },
+  { name: 'Con pedici', expr: 'Y_{out} = not(A_{in} + B_1C_2)' },
 ];
 
 const MODE_LABELS = {

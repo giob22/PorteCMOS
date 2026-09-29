@@ -109,11 +109,19 @@ export function dual(n) {
   return n;
 }
 
-/** Nome di variabile in HTML: le cifre finali diventano pedici (A1 -> A₁). */
+/**
+ * Separa un nome canonico in base e pedice:
+ * "A1" -> A, 1   "A_in" -> A, in   "Y_out" -> Y, out   "Out" -> Out, ''
+ */
+export function splitName(name) {
+  const m = /^([A-Za-z]+?)(?:_([A-Za-z0-9]+)|([0-9]+))?$/.exec(name);
+  return m ? { base: m[1], sub: m[2] || m[3] || '' } : { base: name, sub: '' };
+}
+
+/** Nome di variabile in HTML con il pedice (A1 -> A₁, A_in -> A_in in pedice). */
 export function varHTML(name) {
-  const m = /^([A-Za-z])([0-9]*)$/.exec(name);
-  if (!m) return name;
-  return m[2] ? `${m[1]}<sub>${m[2]}</sub>` : m[1];
+  const { base, sub } = splitName(name);
+  return sub ? `${base}<sub>${sub}</sub>` : base;
 }
 
 /**

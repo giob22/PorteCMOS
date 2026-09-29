@@ -38,9 +38,12 @@ transistor della corrispondente porta CMOS statica complementare.
 | XOR | `A ^ B` `A xor B` |
 | Funzioni | `nand(A, B)` `nor(A, B, C)` `xnor(A, B)` `and(…)` `or(…)` |
 
-Lettere adiacenti sono in AND (`BCD` = B·C·D); una variabile è una lettera seguita
-da eventuali cifre (`A1`, `S0`). Precedenza: NOT, AND, XOR, OR. Il prefisso `Y =`
-è facoltativo e imposta il nome dell’uscita.
+Lettere adiacenti sono in AND (`BCD` = B·C·D). Una variabile è una lettera con un
+eventuale **pedice**: `A_1` (o `A1`), `A_in`, `A_{in}`. Con le graffe il pedice può
+essere seguito da un’altra variabile (`A_{in}B` = A<sub>in</sub>·B), senza graffe
+prende tutte le lettere e cifre che seguono. Precedenza: NOT, AND, XOR, OR. Il
+prefisso `Y =` è facoltativo e imposta il nome dell’uscita, anch’esso con pedice
+(`Y_{out} = …`).
 
 ## Struttura
 

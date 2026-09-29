@@ -6,6 +6,7 @@
 // affianca collegandoli con due bus orizzontali.
 
 import { sizeNetwork, inverterIds, OUTPUT_INVERTER_IDS } from './cmos.js';
+import { splitName } from './logic.js';
 
 const G = {
   leafH: 60,
@@ -67,11 +68,6 @@ const STYLE = `
 // Larghezza stimata del testo (serve solo per l'impaginazione).
 const textWidth = (s, size) => s.length * size * 0.62;
 const fmtNum = (x) => String(Math.round(x * 100) / 100);
-
-const splitName = (name) => {
-  const m = /^([A-Za-z])([0-9]*)$/.exec(name);
-  return m ? { base: m[1], sub: m[2] } : { base: name, sub: '' };
-};
 
 function labelWidth(name, size = G.font) {
   const { base, sub } = splitName(name);
